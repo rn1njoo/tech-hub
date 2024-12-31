@@ -1,19 +1,12 @@
-import type { BlogPost } from "@/types/index";
+import type { BlogPost } from "@/types";
 
-interface FetchBlogPostsParams {
-  platformId?: string;
-}
-
-export const fetchBlogPosts = async ({
-  platformId,
-}: FetchBlogPostsParams): Promise<BlogPost[]> => {
-  const response = await fetch(
-    `/api/posts${platformId ? `?platformId=${platformId}` : ""}`
-  );
+export async function fetchBlogPosts(platform: string): Promise<BlogPost[]> {
+  const response = await fetch(`/api/crawl/${platform}`);
 
   if (!response.ok) {
-    throw new Error("Failed to fetch posts");
+    throw new Error(`Failed to fetch ${platform} blog posts`);
   }
 
-  return response.json();
-};
+  const { data } = await response.json();
+  return data;
+}

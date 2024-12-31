@@ -1,6 +1,6 @@
 "use client";
 
-import { useKurlyPosts } from "../hooks/useKurlyPosts";
+import { useBlogPosts } from "../hooks/useBlogPosts";
 import { BlogCard } from "./BlogCard";
 
 interface BlogGridProps {
@@ -8,7 +8,7 @@ interface BlogGridProps {
 }
 
 export const BlogGrid = ({ platformId }: BlogGridProps) => {
-  const { data: posts, isLoading, error } = useKurlyPosts();
+  const { data: posts, isLoading, error } = useBlogPosts(platformId);
 
   if (isLoading) {
     return (
@@ -26,13 +26,9 @@ export const BlogGrid = ({ platformId }: BlogGridProps) => {
     );
   }
 
-  const filteredPosts = platformId
-    ? posts?.filter((post) => post.platform === platformId)
-    : posts;
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {filteredPosts?.map((post) => (
+      {posts?.map((post) => (
         <BlogCard key={post.link} post={post} />
       ))}
     </div>

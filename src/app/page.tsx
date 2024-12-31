@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { BlogGrid } from "@/modules/blog/components";
-import { PlatformList } from "@/modules/platform/components/PlatformList";
+// import { PlatformList } from "@/modules/platform/components/PlatformList";
 
 export default function HomePage() {
-  const [selectedPlatformId, setSelectedPlatformId] = useState<string>();
+  const [selectedPlatformId] = useState<string>();
 
   return (
     <div className="flex min-h-screen">
@@ -13,10 +13,10 @@ export default function HomePage() {
         <h1 className="text-xl font-bold text-gray-900 mb-6">
           Tech Blog Archive
         </h1>
-        <PlatformList
+        {/* <PlatformList
           selectedPlatformId={selectedPlatformId}
           onPlatformSelect={setSelectedPlatformId}
-        />
+        /> */}
       </aside>
 
       <main className="ml-64 flex-1 p-6">
