@@ -11,7 +11,7 @@ export default function HomePage() {
     <div className="flex min-h-screen">
       <aside className="w-64 bg-white border-r border-gray-200 p-4 fixed h-full">
         <h1 className="text-xl font-bold text-gray-900 mb-6">
-          Tech Blog Archive
+          Tech Hub
         </h1>
         {/* <PlatformList
           selectedPlatformId={selectedPlatformId}

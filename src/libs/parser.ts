@@ -19,7 +19,7 @@ type CustomItem = {
 type BlogConfig = {
   id: string;
   name: string;
-  feedUrl: string;
+  feedUrl?: string;
 };
 
 type BlogConfigs = {
@@ -33,19 +33,19 @@ export const parser: Parser<CustomFeed, CustomItem> = new Parser({
 });
 
 export const BLOG_CONFIGS: BlogConfigs = {
+  woowa: {
+    id: "woowa",
+    name: "우아한형제들 기술블로그",
+  },
   kurly: {
     id: "kurly",
     name: "컬리 테크",
     feedUrl: "http://thefarmersfront.github.io/feed.xml",
   },
-  woowa: {
-    id: "woowa",
-    name: "우아한형제들 기술블로그",
-    feedUrl: "https://techblog.woowahan.com/feed/",
-  },
 };
 
 export function extractFirstImage(content: string): string | null {
-  const match = content?.match(/<img[^>]+src="([^">]+)"/);
+  if (!content) return null;
+  const match = content.match(/<img[^>]+src="([^">]+)"/);
   return match ? match[1] : null;
 }
