@@ -42,8 +42,38 @@ interface ProcessedPost {
 let postsCache = {
   data: null as ProcessedPost[] | null,
   timestamp: null as number | null,
-  CACHE_DURATION: 1000 * 60 * 60,
+  CACHE_DURATION: 1000 * 60 * 60 * 4,
 };
+
+async function getCategoriesMap(headers: any): Promise<Map<number, string>> {
+  const response = await fetch(
+    "https://techblog.woowahan.com/wp-json/wp/v2/categories?per_page=100",
+    { headers }
+  );
+  const categories = (await response.json()) as WPCategory[];
+  return new Map(categories.map((cat) => [cat.id, cat.name]));
+}
+
+function processPost(
+  post: WPPost,
+  categoriesMap: Map<number, string>
+): ProcessedPost {
+  const categories = post.categories
+    .map((catId) => categoriesMap.get(catId))
+    .filter((name): name is string => Boolean(name));
+
+  return {
+    title: post.title.rendered,
+    link: post.link,
+    description: post.excerpt.rendered.replace(/<[^>]*>/g, ""),
+    author: post.author_info?.display_name || "우아한형제들",
+    publishedAt: post.date,
+    categories,
+    thumbnail: post.yoast_head_json?.og_image?.[0]?.url || "",
+    platform: "woowa",
+    techStacks: categories,
+  };
+}
 
 export async function GET(
   request: Request,
@@ -74,6 +104,8 @@ export async function GET(
         "Content-Type": "application/json",
       };
 
+      const categoriesMap = await getCategoriesMap(headers);
+
       const initialResponse = await fetch(
         `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=1`,
         { headers }
@@ -94,80 +126,38 @@ export async function GET(
       const totalPages =
         Number(initialResponse.headers.get("X-WP-TotalPages")) || 1;
 
-      const processedFirstPage = await Promise.all(
-        firstPageData.map(async (post: WPPost) => {
-          const categories = await Promise.all(
-            post.categories.map(async (catId: number) => {
-              const catResponse = await fetch(
-                `https://techblog.woowahan.com/wp-json/wp/v2/categories/${catId}`,
-                { headers }
-              );
-              if (!catResponse.ok) return "";
-              const catData = (await catResponse.json()) as WPCategory;
-              return catData.name;
-            })
-          );
-
-          return {
-            title: post.title.rendered,
-            link: post.link,
-            description: post.excerpt.rendered.replace(/<[^>]*>/g, ""),
-            author: post.author_info?.display_name || "우아한형제들",
-            publishedAt: post.date,
-            categories: categories.filter(Boolean),
-            thumbnail: post.yoast_head_json?.og_image?.[0]?.url || "",
-            platform: "woowa",
-            techStacks: categories.filter(Boolean),
-          };
-        })
+      const processedFirstPage = firstPageData.map((post) =>
+        processPost(post, categoriesMap)
       );
-
       posts = [...processedFirstPage];
 
-      for (let page = 2; page <= totalPages; page++) {
-        try {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (totalPages > 1) {
+        const remainingPages = Array.from(
+          { length: totalPages - 1 },
+          (_, i) => i + 2
+        );
 
-          const pageResponse = await fetch(
-            `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=${page}`,
-            { headers }
-          );
+        const pagePromises = remainingPages.map(async (page) => {
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 200));
 
-          if (!pageResponse.ok) continue;
+            const pageResponse = await fetch(
+              `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=${page}`,
+              { headers }
+            );
 
-          const pageData = (await pageResponse.json()) as WPPost[];
-          const processedPage = await Promise.all(
-            pageData.map(async (post: WPPost) => {
-              const categories = await Promise.all(
-                post.categories.map(async (catId: number) => {
-                  const catResponse = await fetch(
-                    `https://techblog.woowahan.com/wp-json/wp/v2/categories/${catId}`,
-                    { headers }
-                  );
-                  if (!catResponse.ok) return "";
-                  const catData = (await catResponse.json()) as WPCategory;
-                  return catData.name;
-                })
-              );
+            if (!pageResponse.ok) return [];
 
-              return {
-                title: post.title.rendered,
-                link: post.link,
-                description: post.excerpt.rendered.replace(/<[^>]*>/g, ""),
-                author: post.author_info?.display_name || "우아한형제들",
-                publishedAt: post.date,
-                categories: categories.filter(Boolean),
-                thumbnail: post.yoast_head_json?.og_image?.[0]?.url || "",
-                platform: "woowa",
-                techStacks: categories.filter(Boolean),
-              };
-            })
-          );
+            const pageData = (await pageResponse.json()) as WPPost[];
+            return pageData.map((post) => processPost(post, categoriesMap));
+          } catch (error) {
+            console.error(`Error fetching page ${page}:`, error);
+            return [];
+          }
+        });
 
-          posts = [...posts, ...processedPage];
-        } catch (error) {
-          console.error(`Error fetching page ${page}:`, error);
-        }
+        const pagesResults = await Promise.all(pagePromises);
+        posts = [...posts, ...pagesResults.flat()];
       }
 
       postsCache.data = posts;
