@@ -3,23 +3,13 @@ import { parser, BLOG_CONFIGS, extractFirstImage } from "@/libs/parser";
 
 interface WPPost {
   id: number;
-  title: {
-    rendered: string;
-  };
+  title: { rendered: string };
   link: string;
-  excerpt: {
-    rendered: string;
-  };
+  excerpt: { rendered: string };
   date: string;
   categories: number[];
-  author_info?: {
-    display_name: string;
-  };
-  yoast_head_json?: {
-    og_image?: {
-      url: string;
-    }[];
-  };
+  author_info?: { display_name: string };
+  yoast_head_json?: { og_image?: { url: string }[] };
 }
 
 interface WPCategory {
@@ -39,18 +29,36 @@ interface ProcessedPost {
   techStacks: string[];
 }
 
-let postsCache = {
-  data: null as ProcessedPost[] | null,
-  timestamp: null as number | null,
-  CACHE_DURATION: 1000 * 60 * 60 * 4,
+const CACHE_DURATION = 1000 * 60 * 60 * 4;
+let postsCache: { data: ProcessedPost[] | null; timestamp: number | null } = {
+  data: null,
+  timestamp: null,
 };
 
-async function getCategoriesMap(headers: any): Promise<Map<number, string>> {
-  const response = await fetch(
-    "https://techblog.woowahan.com/wp-json/wp/v2/categories?per_page=100",
-    { headers }
-  );
-  const categories = (await response.json()) as WPCategory[];
+async function fetchData(
+  url: string,
+  headers: Record<string, string>
+): Promise<Response> {
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Fetch error:", {
+      url,
+      status: response.status,
+      body: errorText,
+    });
+    throw new Error(`Failed to fetch data: ${response.status}`);
+  }
+  return response;
+}
+
+async function getCategoriesMap(
+  headers: Record<string, string>
+): Promise<Map<number, string>> {
+  const url =
+    "https://techblog.woowahan.com/wp-json/wp/v2/categories?per_page=100";
+  const response = await fetchData(url, headers);
+  const categories: WPCategory[] = await response.json();
   return new Map(categories.map((cat) => [cat.id, cat.name]));
 }
 
@@ -75,19 +83,71 @@ function processPost(
   };
 }
 
+async function fetchWordPressPosts(
+  headers: Record<string, string>
+): Promise<ProcessedPost[]> {
+  const categoriesMap = await getCategoriesMap(headers);
+  const perPage = 100;
+  const initialUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=1`;
+
+  const initialResponse = await fetchData(initialUrl, headers);
+  const firstPageData = (await initialResponse.json()) as WPPost[];
+  const totalPages =
+    Number(initialResponse.headers?.get("X-WP-TotalPages")) || 1;
+
+  const posts = firstPageData.map((post) => processPost(post, categoriesMap));
+
+  if (totalPages > 1) {
+    const pagePromises = Array.from(
+      { length: totalPages - 1 },
+      (_, i) => i + 2
+    ).map(async (page) => {
+      const pageUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=${page}`;
+      const pageResponse = await fetchData(pageUrl, headers);
+      const pageData = (await pageResponse.json()) as WPPost[];
+      return pageData.map((post) => processPost(post, categoriesMap));
+    });
+
+    const additionalPosts = (await Promise.all(pagePromises)).flat();
+    return [...posts, ...additionalPosts];
+  }
+
+  return posts;
+}
+
+async function fetchRSSPosts(platform: string): Promise<ProcessedPost[]> {
+  const config = BLOG_CONFIGS[platform];
+  if (!config?.feedUrl) {
+    throw new Error(`Feed URL not found for platform: ${platform}`);
+  }
+
+  const feed = await parser.parseURL(config.feedUrl);
+  return feed.items.map((item) => ({
+    title: item.title,
+    link: item.link,
+    description: item.contentSnippet || "",
+    author: item.creator || "",
+    publishedAt: item.isoDate || "",
+    categories: item.categories || [],
+    thumbnail: extractFirstImage(item.content) || "",
+    platform: config.id,
+    techStacks: item.categories || [],
+  }));
+}
+
 export async function GET(
   request: Request,
   { params }: { params: { platform: string } }
 ) {
   try {
-    const platform = params.platform;
+    const { platform } = params;
     let posts: ProcessedPost[] = [];
 
     if (platform === "woowa") {
       if (
         postsCache.data &&
         postsCache.timestamp &&
-        Date.now() - postsCache.timestamp < postsCache.CACHE_DURATION
+        Date.now() - postsCache.timestamp < CACHE_DURATION
       ) {
         return NextResponse.json({
           success: true,
@@ -96,7 +156,6 @@ export async function GET(
         });
       }
 
-      const perPage = 100;
       const headers = {
         Accept: "application/json",
         "User-Agent":
@@ -104,88 +163,13 @@ export async function GET(
         "Content-Type": "application/json",
       };
 
-      const categoriesMap = await getCategoriesMap(headers);
-
-      const initialResponse = await fetch(
-        `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=1`,
-        { headers }
-      );
-
-      if (!initialResponse.ok) {
-        const errorText = await initialResponse.text();
-        console.error("Initial response error:", {
-          status: initialResponse.status,
-          body: errorText,
-        });
-        throw new Error(
-          `Failed to fetch first page: ${initialResponse.status}`
-        );
-      }
-
-      const firstPageData = (await initialResponse.json()) as WPPost[];
-      const totalPages =
-        Number(initialResponse.headers.get("X-WP-TotalPages")) || 1;
-
-      const processedFirstPage = firstPageData.map((post) =>
-        processPost(post, categoriesMap)
-      );
-      posts = [...processedFirstPage];
-
-      if (totalPages > 1) {
-        const remainingPages = Array.from(
-          { length: totalPages - 1 },
-          (_, i) => i + 2
-        );
-
-        const pagePromises = remainingPages.map(async (page) => {
-          try {
-            await new Promise((resolve) => setTimeout(resolve, 200));
-
-            const pageResponse = await fetch(
-              `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=${page}`,
-              { headers }
-            );
-
-            if (!pageResponse.ok) return [];
-
-            const pageData = (await pageResponse.json()) as WPPost[];
-            return pageData.map((post) => processPost(post, categoriesMap));
-          } catch (error) {
-            console.error(`Error fetching page ${page}:`, error);
-            return [];
-          }
-        });
-
-        const pagesResults = await Promise.all(pagePromises);
-        posts = [...posts, ...pagesResults.flat()];
-      }
-
-      postsCache.data = posts;
-      postsCache.timestamp = Date.now();
+      posts = await fetchWordPressPosts(headers);
+      postsCache = { data: posts, timestamp: Date.now() };
     } else {
-      const config = BLOG_CONFIGS[platform];
-      if (!config?.feedUrl) {
-        throw new Error(`Feed URL not found for platform: ${platform}`);
-      }
-
-      const feed = await parser.parseURL(config.feedUrl);
-      posts = feed.items.map((item) => ({
-        title: item.title,
-        link: item.link,
-        description: item.contentSnippet || "",
-        author: item.creator || "",
-        publishedAt: item.isoDate || "",
-        categories: item.categories || [],
-        thumbnail: extractFirstImage(item.content) || "",
-        platform: config.id,
-        techStacks: item.categories || [],
-      }));
+      posts = await fetchRSSPosts(platform);
     }
 
-    return NextResponse.json({
-      success: true,
-      data: posts,
-    });
+    return NextResponse.json({ success: true, data: posts });
   } catch (error) {
     console.error(`Error fetching ${params.platform} blog:`, error);
     return NextResponse.json(
