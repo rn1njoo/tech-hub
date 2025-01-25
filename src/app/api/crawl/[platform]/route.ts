@@ -88,7 +88,13 @@ async function fetchWordPressPosts(
 ): Promise<ProcessedPost[]> {
   const categoriesMap = await getCategoriesMap(headers);
   const perPage = 100;
-  const initialUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=1`;
+
+  // 5달치 날짜 계산
+  const fiveMonthsAgo = new Date();
+  fiveMonthsAgo.setMonth(fiveMonthsAgo.getMonth() - 5);
+  const after = fiveMonthsAgo.toISOString();
+
+  const initialUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=1&after=${after}`;
 
   const initialResponse = await fetchData(initialUrl, headers);
   const firstPageData = (await initialResponse.json()) as WPPost[];
@@ -102,7 +108,7 @@ async function fetchWordPressPosts(
       { length: totalPages - 1 },
       (_, i) => i + 2
     ).map(async (page) => {
-      const pageUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=${page}`;
+      const pageUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=${page}&after=${after}`;
       const pageResponse = await fetchData(pageUrl, headers);
       const pageData = (await pageResponse.json()) as WPPost[];
       return pageData.map((post) => processPost(post, categoriesMap));
@@ -122,17 +128,22 @@ async function fetchRSSPosts(platform: string): Promise<ProcessedPost[]> {
   }
 
   const feed = await parser.parseURL(config.feedUrl);
-  return feed.items.map((item) => ({
-    title: item.title,
-    link: item.link,
-    description: item.contentSnippet || "",
-    author: item.creator || "",
-    publishedAt: item.isoDate || "",
-    categories: item.categories || [],
-    thumbnail: extractFirstImage(item.content) || "",
-    platform: config.id,
-    techStacks: item.categories || [],
-  }));
+  const fiveMonthsAgo = new Date();
+  fiveMonthsAgo.setMonth(fiveMonthsAgo.getMonth() - 5);
+
+  return feed.items
+    .filter((item) => new Date(item.isoDate || "") > fiveMonthsAgo)
+    .map((item) => ({
+      title: item.title,
+      link: item.link,
+      description: item.contentSnippet || "",
+      author: item.creator || "",
+      publishedAt: item.isoDate || "",
+      categories: item.categories || [],
+      thumbnail: extractFirstImage(item.content) || "",
+      platform: config.id,
+      techStacks: item.categories || [],
+    }));
 }
 
 export async function GET(

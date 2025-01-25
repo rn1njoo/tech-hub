@@ -35,7 +35,7 @@ export const Sidebar = ({ platforms, onPlatformSelect }: SidebarProps) => {
                 size="md"
               >
                 <Image
-                  src={platform.icon}
+                  src={platform.icon || "/default-icon.png"}
                   alt={platform.name}
                   width={20}
                   height={20}
