@@ -1,5 +1,4 @@
 import Image from "next/image";
-import { useState } from "react";
 import { Button } from "../UI/Button";
 
 interface Platform {
@@ -11,11 +10,16 @@ interface Platform {
 interface SidebarProps {
   platforms: Platform[];
   onPlatformSelect: (platformId: string) => void;
+  selectedPlatform: string | null;
+  setSelectedPlatform: (platformId: string | null) => void;
 }
 
-export const Sidebar = ({ platforms, onPlatformSelect }: SidebarProps) => {
-  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-
+export const Sidebar = ({
+  platforms,
+  onPlatformSelect,
+  selectedPlatform,
+  setSelectedPlatform,
+}: SidebarProps) => {
   const handlePlatformClick = (platformId: string) => {
     setSelectedPlatform(platformId);
     onPlatformSelect(platformId);

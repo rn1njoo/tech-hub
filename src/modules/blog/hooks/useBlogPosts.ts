@@ -14,8 +14,19 @@ export const useBlogPosts = (platform?: string) => {
     })),
   });
 
+  const posts = results
+    .map((result) => result.data)
+    .flat()
+    .filter(Boolean) as BlogPost[];
+
+  // 날짜 기준 내림차순 정렬
+  const sortedPosts = posts.sort(
+    (a, b) =>
+      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  );
+
   return {
-    data: results.map((result) => result.data).flat() as BlogPost[],
+    data: sortedPosts,
     isLoading: results.some((result) => result.isLoading),
     error: results.some((result) => result.error),
   };

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { BlogPost } from "@/types";
-import { Card, Badge } from "@/components/UI";
+import { Card } from "@/components/UI";
+import decodeHTML from "@/utils/decodeHTML";
 
 interface BlogCardProps {
   post: BlogPost;
@@ -26,22 +27,24 @@ export const BlogCard = ({ post }: BlogCardProps) => {
             />
           </div>
         )}
-        <div className="p-4 space-y-3">
-          <h3 className="text-lg font-semibold line-clamp-2 hover:text-blue-600">
+        <div className="p-4">
+          <h3 className="font-bold" style={{ fontSize: "1.8rem" }}>
             {post.title}
           </h3>
-          <p className="text-sm text-gray-600 line-clamp-3">
-            {post.description}
+          <p className="text-sm text-gray-600">
+            {decodeHTML(post.description)}
           </p>
-          <div className="flex flex-wrap gap-2">
+          {/* <div className="flex flex-wrap gap-2">
             {post.techStacks.map((tech) => (
               <Badge key={tech} variant="tech" size="sm">
                 {tech}
               </Badge>
             ))}
-          </div>
-          <div className="flex items-center justify-between text-sm text-gray-500">
-            <span>{post.author}</span>
+          </div> */}
+          <div
+            className="flex text-sm text-gray-500"
+            style={{ justifyContent: "flex-end" }}
+          >
             <span>
               {new Date(post.publishedAt).toLocaleDateString("ko-KR")}
             </span>

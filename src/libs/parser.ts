@@ -19,6 +19,7 @@ type CustomItem = {
 type BlogConfig = {
   id: string;
   name: string;
+  url: string;
   feedUrl?: string;
   icon?: string;
 };
@@ -37,11 +38,13 @@ export const BLOG_CONFIGS: BlogConfigs = {
   woowa: {
     id: "woowa",
     name: "우아한형제들",
+    url: "https://techblog.woowahan.com/",
     icon: "/icons/woowa.png",
   },
   kurly: {
     id: "kurly",
     name: "컬리 테크",
+    url: "https://helloworld.kurly.com/",
     feedUrl: "http://thefarmersfront.github.io/feed.xml",
     icon: "/icons/kurly.png",
   },
