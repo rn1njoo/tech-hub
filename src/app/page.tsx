@@ -1,27 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import { BLOG_CONFIGS } from "@/libs/parser";
 import { BlogGrid } from "@/modules/blog/components";
-// import { PlatformList } from "@/modules/platform/components/PlatformList";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { Header } from "@/components/layout/Header";
 
 export default function HomePage() {
-  const [selectedPlatformId] = useState<string>();
+  const [selectedPlatformId, setSelectedPlatformId] = useState<string>();
+  const platforms = Object.values(BLOG_CONFIGS);
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-64 bg-white border-r border-gray-200 p-4 fixed h-full">
-        <h1 className="text-xl font-bold text-gray-900 mb-6">
-          Tech Hub
-        </h1>
-        {/* <PlatformList
-          selectedPlatformId={selectedPlatformId}
+    <>
+      <Header />
+      <div className="flex min-h-screen pt-16">
+        <Sidebar
+          platforms={platforms}
           onPlatformSelect={setSelectedPlatformId}
-        /> */}
-      </aside>
-
-      <main className="ml-64 flex-1 p-6">
-        <BlogGrid platformId={selectedPlatformId} />
-      </main>
-    </div>
+        />
+        <main className="ml-64 flex-1 p-6">
+          <BlogGrid platformId={selectedPlatformId} />
+        </main>
+      </div>
+    </>
   );
 }

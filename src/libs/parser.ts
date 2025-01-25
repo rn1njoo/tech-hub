@@ -20,6 +20,7 @@ type BlogConfig = {
   id: string;
   name: string;
   feedUrl?: string;
+  icon?: string;
 };
 
 type BlogConfigs = {
@@ -35,12 +36,14 @@ export const parser: Parser<CustomFeed, CustomItem> = new Parser({
 export const BLOG_CONFIGS: BlogConfigs = {
   woowa: {
     id: "woowa",
-    name: "우아한형제들 기술블로그",
+    name: "우아한형제들",
+    icon: "/icons/woowa.png",
   },
   kurly: {
     id: "kurly",
     name: "컬리 테크",
     feedUrl: "http://thefarmersfront.github.io/feed.xml",
+    icon: "/icons/kurly.png",
   },
 };
 
