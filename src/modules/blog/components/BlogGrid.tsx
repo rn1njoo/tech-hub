@@ -39,6 +39,15 @@ export const BlogGrid = ({ platformId }: BlogGridProps) => {
               </div>
             </div>
           </div>
+          {/* <a
+                  href={platform.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-gray-500 hover:text-gray-700"
+                >
+                  <span className="text-sm">웹사이트 방문</span>
+                  <ExternalLink className="w-4 h-4" />
+                </a> */}
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { parser, BLOG_CONFIGS, extractFirstImage } from "@/libs/parser";
 
 interface WPPost {
@@ -147,7 +147,7 @@ async function fetchRSSPosts(platform: string): Promise<ProcessedPost[]> {
 }
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { platform: string } }
 ) {
   try {
