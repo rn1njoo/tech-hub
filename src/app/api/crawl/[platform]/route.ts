@@ -148,48 +148,49 @@ async function fetchRSSPosts(platform: string): Promise<ProcessedPost[]> {
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { platform: string } }
-) {
-  try {
-    const { platform } = params;
-    let posts: ProcessedPost[] = [];
+  context: { params: { platform: string } }
+): Promise<NextResponse> {
+  {
+    try {
+      const { platform } = context.params;
+      let posts: ProcessedPost[] = [];
 
-    if (platform === "woowa") {
-      if (
-        postsCache.data &&
-        postsCache.timestamp &&
-        Date.now() - postsCache.timestamp < CACHE_DURATION
-      ) {
-        return NextResponse.json({
-          success: true,
-          data: postsCache.data,
-          cached: true,
-        });
+      if (platform === "woowa") {
+        if (
+          postsCache.data &&
+          postsCache.timestamp &&
+          Date.now() - postsCache.timestamp < CACHE_DURATION
+        ) {
+          return NextResponse.json({
+            success: true,
+            data: postsCache.data,
+            cached: true,
+          });
+        }
+
+        const headers = {
+          Accept: "application/json",
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Content-Type": "application/json",
+        };
+
+        posts = await fetchWordPressPosts(headers);
+        postsCache = { data: posts, timestamp: Date.now() };
+      } else {
+        posts = await fetchRSSPosts(platform);
       }
 
-      const headers = {
-        Accept: "application/json",
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Content-Type": "application/json",
-      };
-
-      posts = await fetchWordPressPosts(headers);
-      postsCache = { data: posts, timestamp: Date.now() };
-    } else {
-      posts = await fetchRSSPosts(platform);
+      return NextResponse.json({ success: true, data: posts });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Failed to fetch blog posts",
+          details: error instanceof Error ? error.message : "Unknown error",
+        },
+        { status: 500 }
+      );
     }
-
-    return NextResponse.json({ success: true, data: posts });
-  } catch (error) {
-    console.error(`Error fetching ${params.platform} blog:`, error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to fetch blog posts",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
   }
 }
