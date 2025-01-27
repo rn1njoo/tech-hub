@@ -1,21 +1,21 @@
 import { type NextRequest } from "next/server";
 import { parser, BLOG_CONFIGS, extractFirstImage } from "@/libs/parser";
 
-interface WPPost {
-  id: number;
-  title: { rendered: string };
-  link: string;
-  excerpt: { rendered: string };
-  date: string;
-  categories: number[];
-  author_info?: { display_name: string };
-  yoast_head_json?: { og_image?: { url: string }[] };
-}
+// interface WPPost {
+//   id: number;
+//   title: { rendered: string };
+//   link: string;
+//   excerpt: { rendered: string };
+//   date: string;
+//   categories: number[];
+//   author_info?: { display_name: string };
+//   yoast_head_json?: { og_image?: { url: string }[] };
+// }
 
-interface WPCategory {
-  id: number;
-  name: string;
-}
+// interface WPCategory {
+//   id: number;
+//   name: string;
+// }
 
 interface ProcessedPost {
   title: string;
@@ -30,7 +30,6 @@ interface ProcessedPost {
 }
 
 const CACHE_DURATION = 1000 * 60 * 60 * 4;
-const POSTS_PER_PAGE = 100;
 const MONTHS_TO_FETCH = 5;
 
 const postsCache = new Map<
@@ -38,53 +37,53 @@ const postsCache = new Map<
   { data: ProcessedPost[]; timestamp: number }
 >();
 
-async function fetchWithErrorHandling(
-  url: string,
-  headers: Record<string, string>
-) {
-  const response = await fetch(url, { headers });
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Fetch error:", {
-      url,
-      status: response.status,
-      body: errorText,
-    });
-    throw new Error(`Failed to fetch from ${url}: HTTP ${response.status}`);
-  }
-  return response;
-}
+// async function fetchWithErrorHandling(
+//   url: string,
+//   headers: Record<string, string>
+// ) {
+//   const response = await fetch(url, { headers });
+//   if (!response.ok) {
+//     const errorText = await response.text();
+//     console.error("Fetch error:", {
+//       url,
+//       status: response.status,
+//       body: errorText,
+//     });
+//     throw new Error(`Failed to fetch from ${url}: HTTP ${response.status}`);
+//   }
+//   return response;
+// }
 
-async function getCategoriesMap(
-  headers: Record<string, string>
-): Promise<Map<number, string>> {
-  const url =
-    "https://techblog.woowahan.com/wp-json/wp/v2/categories?per_page=100";
-  const response = await fetchWithErrorHandling(url, headers);
-  const categories: WPCategory[] = await response.json();
-  return new Map(categories.map((cat) => [cat.id, cat.name]));
-}
+// async function getCategoriesMap(
+//   headers: Record<string, string>
+// ): Promise<Map<number, string>> {
+//   const url =
+//     "https://techblog.woowahan.com/wp-json/wp/v2/categories?per_page=100";
+//   const response = await fetchWithErrorHandling(url, headers);
+//   const categories: WPCategory[] = await response.json();
+//   return new Map(categories.map((cat) => [cat.id, cat.name]));
+// }
 
-function processPost(
-  post: WPPost,
-  categoriesMap: Map<number, string>
-): ProcessedPost {
-  const categories = post.categories
-    .map((catId) => categoriesMap.get(catId))
-    .filter((name): name is string => Boolean(name));
+// function processPost(
+//   post: WPPost,
+//   categoriesMap: Map<number, string>
+// ): ProcessedPost {
+//   const categories = post.categories
+//     .map((catId) => categoriesMap.get(catId))
+//     .filter((name): name is string => Boolean(name));
 
-  return {
-    title: post.title.rendered,
-    link: post.link,
-    description: post.excerpt.rendered.replace(/<[^>]*>/g, ""),
-    author: post.author_info?.display_name || "우아한형제들",
-    publishedAt: post.date,
-    categories,
-    thumbnail: post.yoast_head_json?.og_image?.[0]?.url || "",
-    platform: "woowa",
-    techStacks: categories,
-  };
-}
+//   return {
+//     title: post.title.rendered,
+//     link: post.link,
+//     description: post.excerpt.rendered.replace(/<[^>]*>/g, ""),
+//     author: post.author_info?.display_name || "우아한형제들",
+//     publishedAt: post.date,
+//     categories,
+//     thumbnail: post.yoast_head_json?.og_image?.[0]?.url || "",
+//     platform: "woowa",
+//     techStacks: categories,
+//   };
+// }
 
 async function fetchWoowaRSSPosts(): Promise<ProcessedPost[]> {
   // RSS 메인 피드
