@@ -39,6 +39,7 @@ export const BLOG_CONFIGS: BlogConfigs = {
     id: "woowa",
     name: "우아한형제들",
     url: "https://techblog.woowahan.com/",
+    feedUrl: "https://techblog.woowahan.com/feed/",
     icon: "/icons/woowa.png",
   },
   kurly: {

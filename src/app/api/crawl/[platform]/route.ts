@@ -86,38 +86,53 @@ function processPost(
   };
 }
 
-async function fetchWordPressPosts(
-  headers: Record<string, string>
-): Promise<ProcessedPost[]> {
-  const categoriesMap = await getCategoriesMap(headers);
+async function fetchWoowaRSSPosts(): Promise<ProcessedPost[]> {
+  // RSS 메인 피드
+  const MAIN_FEED_URL = "https://techblog.woowahan.com/feed/";
+  // 페이지별 피드 (WordPress에서 제공)
+  const PAGE_FEED_URL = "https://techblog.woowahan.com/feed/?paged=";
+
   const monthsAgo = new Date();
   monthsAgo.setMonth(monthsAgo.getMonth() - MONTHS_TO_FETCH);
-  const after = monthsAgo.toISOString();
 
-  const initialUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${POSTS_PER_PAGE}&page=1&after=${after}`;
-  const initialResponse = await fetchWithErrorHandling(initialUrl, headers);
-  const firstPageData = (await initialResponse.json()) as WPPost[];
-  const totalPages =
-    Number(initialResponse.headers?.get("X-WP-TotalPages")) || 1;
+  let allPosts: ProcessedPost[] = [];
+  let page = 1;
+  let shouldContinue = true;
 
-  const posts = firstPageData.map((post) => processPost(post, categoriesMap));
+  while (shouldContinue && page <= 10) {
+    // 최대 10페이지까지만 시도
+    try {
+      const feedUrl = page === 1 ? MAIN_FEED_URL : `${PAGE_FEED_URL}${page}`;
+      const feed = await parser.parseURL(feedUrl);
 
-  if (totalPages > 1) {
-    const pagePromises = Array.from(
-      { length: totalPages - 1 },
-      (_, i) => i + 2
-    ).map(async (page) => {
-      const pageUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${POSTS_PER_PAGE}&page=${page}&after=${after}`;
-      const pageResponse = await fetchWithErrorHandling(pageUrl, headers);
-      const pageData = (await pageResponse.json()) as WPPost[];
-      return pageData.map((post) => processPost(post, categoriesMap));
-    });
+      const posts = feed.items
+        .filter((item) => new Date(item.isoDate || "") > monthsAgo)
+        .map((item) => ({
+          title: item.title,
+          link: item.link,
+          description: item.contentSnippet || "",
+          author: item.creator || "우아한형제들",
+          publishedAt: item.isoDate || "",
+          categories: item.categories || [],
+          thumbnail: extractFirstImage(item.content) || "",
+          platform: "woowa",
+          techStacks: item.categories || [],
+        }));
 
-    const additionalPosts = (await Promise.all(pagePromises)).flat();
-    return [...posts, ...additionalPosts];
+      if (posts.length === 0) {
+        shouldContinue = false;
+      } else {
+        allPosts = [...allPosts, ...posts];
+      }
+
+      page++;
+    } catch (error) {
+      console.error(`Error fetching page ${page}:`, error);
+      break;
+    }
   }
 
-  return posts;
+  return allPosts;
 }
 
 async function fetchRSSPosts(platform: string): Promise<ProcessedPost[]> {
@@ -192,15 +207,9 @@ export async function GET(request: NextRequest): Promise<Response> {
       );
     }
 
-    const headers = {
-      Accept: "application/json",
-      "User-Agent": "Mozilla/5.0 (compatible)",
-      "Content-Type": "application/json",
-    };
-
     const fetchPosts =
       platform === "woowa"
-        ? () => fetchWordPressPosts(headers)
+        ? () => fetchWoowaRSSPosts()
         : () => fetchRSSPosts(platform);
 
     const { data, cached } = await getCachedPosts(platform, fetchPosts);
