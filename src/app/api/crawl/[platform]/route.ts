@@ -91,6 +91,8 @@ async function fetchWoowaRSSPosts(): Promise<ProcessedPost[]> {
   // 페이지별 피드 (WordPress에서 제공)
   const PAGE_FEED_URL = "https://techblog.woowahan.com/feed/?paged=";
 
+  console.log("Starting to fetch Woowa RSS posts..."); // 함수 시작
+
   const monthsAgo = new Date();
   monthsAgo.setMonth(monthsAgo.getMonth() - MONTHS_TO_FETCH);
 
@@ -99,10 +101,12 @@ async function fetchWoowaRSSPosts(): Promise<ProcessedPost[]> {
   let shouldContinue = true;
 
   while (shouldContinue && page <= 10) {
-    // 최대 10페이지까지만 시도
     try {
       const feedUrl = page === 1 ? MAIN_FEED_URL : `${PAGE_FEED_URL}${page}`;
+      console.log(`Fetching page ${page} from: ${feedUrl}`); // URL 로깅
+
       const feed = await parser.parseURL(feedUrl);
+      console.log(`Page ${page} feed items count:`, feed.items.length); // 각 페이지의 아이템 수
 
       const posts = feed.items
         .filter((item) => new Date(item.isoDate || "") > monthsAgo)
@@ -118,19 +122,32 @@ async function fetchWoowaRSSPosts(): Promise<ProcessedPost[]> {
           techStacks: item.categories || [],
         }));
 
+      console.log(`Page ${page} filtered posts count:`, posts.length); // 필터링 후 포스트 수
+
       if (posts.length === 0) {
+        console.log(`No posts found on page ${page}, stopping pagination`); // 페이지네이션 중단 로그
         shouldContinue = false;
       } else {
         allPosts = [...allPosts, ...posts];
+        console.log("Total posts collected so far:", allPosts.length); // 누적 포스트 수
       }
 
       page++;
     } catch (error) {
       console.error(`Error fetching page ${page}:`, error);
+      if (error instanceof Error) {
+        console.error("Error details:", {
+          message: error.message,
+          stack: error.stack,
+        });
+      } else {
+        console.error("Unknown error type:", error);
+      }
       break;
     }
   }
 
+  console.log("Final total posts:", allPosts.length); // 최종 포스트 수
   return allPosts;
 }
 
