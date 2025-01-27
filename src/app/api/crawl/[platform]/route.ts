@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { type NextRequest } from "next/server";
 import { parser, BLOG_CONFIGS, extractFirstImage } from "@/libs/parser";
 
 interface WPPost {
@@ -30,15 +30,18 @@ interface ProcessedPost {
 }
 
 const CACHE_DURATION = 1000 * 60 * 60 * 4;
-let postsCache: { data: ProcessedPost[] | null; timestamp: number | null } = {
-  data: null,
-  timestamp: null,
-};
+const POSTS_PER_PAGE = 100;
+const MONTHS_TO_FETCH = 5;
 
-async function fetchData(
+const postsCache = new Map<
+  string,
+  { data: ProcessedPost[]; timestamp: number }
+>();
+
+async function fetchWithErrorHandling(
   url: string,
   headers: Record<string, string>
-): Promise<Response> {
+) {
   const response = await fetch(url, { headers });
   if (!response.ok) {
     const errorText = await response.text();
@@ -47,7 +50,7 @@ async function fetchData(
       status: response.status,
       body: errorText,
     });
-    throw new Error(`Failed to fetch data: ${response.status}`);
+    throw new Error(`Failed to fetch from ${url}: HTTP ${response.status}`);
   }
   return response;
 }
@@ -57,7 +60,7 @@ async function getCategoriesMap(
 ): Promise<Map<number, string>> {
   const url =
     "https://techblog.woowahan.com/wp-json/wp/v2/categories?per_page=100";
-  const response = await fetchData(url, headers);
+  const response = await fetchWithErrorHandling(url, headers);
   const categories: WPCategory[] = await response.json();
   return new Map(categories.map((cat) => [cat.id, cat.name]));
 }
@@ -87,16 +90,12 @@ async function fetchWordPressPosts(
   headers: Record<string, string>
 ): Promise<ProcessedPost[]> {
   const categoriesMap = await getCategoriesMap(headers);
-  const perPage = 100;
+  const monthsAgo = new Date();
+  monthsAgo.setMonth(monthsAgo.getMonth() - MONTHS_TO_FETCH);
+  const after = monthsAgo.toISOString();
 
-  // 5달치 날짜 계산
-  const fiveMonthsAgo = new Date();
-  fiveMonthsAgo.setMonth(fiveMonthsAgo.getMonth() - 5);
-  const after = fiveMonthsAgo.toISOString();
-
-  const initialUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=1&after=${after}`;
-
-  const initialResponse = await fetchData(initialUrl, headers);
+  const initialUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${POSTS_PER_PAGE}&page=1&after=${after}`;
+  const initialResponse = await fetchWithErrorHandling(initialUrl, headers);
   const firstPageData = (await initialResponse.json()) as WPPost[];
   const totalPages =
     Number(initialResponse.headers?.get("X-WP-TotalPages")) || 1;
@@ -108,8 +107,8 @@ async function fetchWordPressPosts(
       { length: totalPages - 1 },
       (_, i) => i + 2
     ).map(async (page) => {
-      const pageUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${perPage}&page=${page}&after=${after}`;
-      const pageResponse = await fetchData(pageUrl, headers);
+      const pageUrl = `https://techblog.woowahan.com/wp-json/wp/v2/posts?per_page=${POSTS_PER_PAGE}&page=${page}&after=${after}`;
+      const pageResponse = await fetchWithErrorHandling(pageUrl, headers);
       const pageData = (await pageResponse.json()) as WPPost[];
       return pageData.map((post) => processPost(post, categoriesMap));
     });
@@ -128,11 +127,11 @@ async function fetchRSSPosts(platform: string): Promise<ProcessedPost[]> {
   }
 
   const feed = await parser.parseURL(config.feedUrl);
-  const fiveMonthsAgo = new Date();
-  fiveMonthsAgo.setMonth(fiveMonthsAgo.getMonth() - 5);
+  const monthsAgo = new Date();
+  monthsAgo.setMonth(monthsAgo.getMonth() - MONTHS_TO_FETCH);
 
   return feed.items
-    .filter((item) => new Date(item.isoDate || "") > fiveMonthsAgo)
+    .filter((item) => new Date(item.isoDate || "") > monthsAgo)
     .map((item) => ({
       title: item.title,
       link: item.link,
@@ -146,51 +145,87 @@ async function fetchRSSPosts(platform: string): Promise<ProcessedPost[]> {
     }));
 }
 
-export async function GET(
-  _request: NextRequest,
-  context: { params: { platform: string } }
-): Promise<NextResponse> {
-  {
-    try {
-      const { platform } = context.params;
-      let posts: ProcessedPost[] = [];
+async function getCachedPosts(
+  platform: string,
+  fetchFn: () => Promise<ProcessedPost[]>
+) {
+  const cached = postsCache.get(platform);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return { data: cached.data, cached: true };
+  }
 
-      if (platform === "woowa") {
-        if (
-          postsCache.data &&
-          postsCache.timestamp &&
-          Date.now() - postsCache.timestamp < CACHE_DURATION
-        ) {
-          return NextResponse.json({
-            success: true,
-            data: postsCache.data,
-            cached: true,
-          });
-        }
+  const posts = await fetchFn();
+  postsCache.set(platform, { data: posts, timestamp: Date.now() });
+  return { data: posts, cached: false };
+}
 
-        const headers = {
-          Accept: "application/json",
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Content-Type": "application/json",
-        };
+export async function GET(request: NextRequest): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const platform = url.pathname.split("/").pop(); // Extract platform from the URL path
 
-        posts = await fetchWordPressPosts(headers);
-        postsCache = { data: posts, timestamp: Date.now() };
-      } else {
-        posts = await fetchRSSPosts(platform);
-      }
-
-      return NextResponse.json({ success: true, data: posts });
-    } catch (error) {
-      return NextResponse.json(
-        {
+    if (!platform) {
+      return new Response(
+        JSON.stringify({
           success: false,
-          error: "Failed to fetch blog posts",
-          details: error instanceof Error ? error.message : "Unknown error",
-        },
-        { status: 500 }
+          error: "Missing platform parameter",
+          validPlatforms: [...Object.keys(BLOG_CONFIGS), "woowa"],
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
       );
     }
+
+    if (!(platform in BLOG_CONFIGS) && platform !== "woowa") {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Invalid platform",
+          validPlatforms: [...Object.keys(BLOG_CONFIGS), "woowa"],
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const headers = {
+      Accept: "application/json",
+      "User-Agent": "Mozilla/5.0 (compatible)",
+      "Content-Type": "application/json",
+    };
+
+    const fetchPosts =
+      platform === "woowa"
+        ? () => fetchWordPressPosts(headers)
+        : () => fetchRSSPosts(platform);
+
+    const { data, cached } = await getCachedPosts(platform, fetchPosts);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data,
+        cached,
+        totalPosts: data.length,
+      }),
+      { headers: { "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("API Error:", error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Failed to fetch blog posts",
+        details: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 }
