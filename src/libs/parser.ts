@@ -35,12 +35,12 @@ export const parser: Parser<CustomFeed, CustomItem> = new Parser({
 });
 
 export const BLOG_CONFIGS: BlogConfigs = {
-  woowa: {
-    id: "woowa",
-    name: "우아한형제들",
-    url: "https://techblog.woowahan.com/",
-    feedUrl: "https://techblog.woowahan.com/feed/",
-    icon: "/icons/woowa.png",
+  inflab: {
+    id: "inflab",
+    name: "인프랩 테크",
+    url: "https://tech.inflab.com/",
+    feedUrl: "https://tech.inflab.com/rss.xml",
+    icon: "/icons/inflab.png",
   },
   kurly: {
     id: "kurly",
